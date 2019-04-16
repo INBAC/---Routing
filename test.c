@@ -38,6 +38,8 @@ int main(int argc, char* argv[]){
 	srv();
 	sleep(1);
   }
+
+  //pthread_join(sender, (void**)&status);
   
   return 0;
 }
