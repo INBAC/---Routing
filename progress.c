@@ -1,6 +1,7 @@
 /*
 	Written By: Jongwon Lee
 	Purpose: To simulate routing table protocol
+	useful functions (socket, pthread, sigaction, timer, open, close, send, recv, bind, accept, listen, connect, memset, htons/l, ntohs/l, memset, malloc/free)
 */
 #include<stdio.h>
 #include <stdlib.h>
@@ -19,14 +20,31 @@
 
 typedef struct
 {
-	char* dstip;
-	int dstport;
-	char* nextip;
-	int nextport;
+	char* destinationIp;
+	int destinationPort;
+	char* nextIp;
+	int nextPort;
 	int metric;
 }ROUTING_TABLE_ENTRY;
 
+void *sendThreadFunction(void *args)
+{
+	pthread_exit(NULL);
+}
+
+void *receiveThreadFunction(void *args)
+{
+	pthread_exit(NULL);
+}
+
 void main(int argc, char* args[])
 {
+	pthread_t sendThread;
+	pthread_t receiveThread;
+	pthread_create(&sendThread, NULL, sendThreadFunction, NULL);
+	pthread_create(&receiveThread, NULL, receiveThreadFunction, NULL);
 
+	pthread_join(sendThread, NULL);
+	pthread_join(receiveThread, NULL);
+	return;
 }
