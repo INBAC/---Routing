@@ -15,13 +15,18 @@
 #include <netdb.h>
 
 #define NODE_NUMBER 5
+#define BUFFER_SIZE 8
 
-typedef struct ROUTING_TABLE_ENTRY
+typedef struct
 {
 	char* dstip;
 	int dstport;
 	char* nextip;
 	int nextport;
 	int metric;
-};
+}ROUTING_TABLE_ENTRY;
 
+void main(int argc, char* args[])
+{
+
+}
