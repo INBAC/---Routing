@@ -17,6 +17,7 @@
 
 #define NODE_NUMBER 5
 #define BUFFER_SIZE 8
+#define PORT_NUM 3605
 
 typedef struct
 {
@@ -39,6 +40,11 @@ void *receiveThreadFunction(void *args)
 
 void main(int argc, char* args[])
 {
+	if(argc < 2)
+	{
+		printf("Please enter the IP address");
+		exit(0);
+	}
 	pthread_t sendThread;
 	pthread_t receiveThread;
 	pthread_create(&sendThread, NULL, sendThreadFunction, NULL);
