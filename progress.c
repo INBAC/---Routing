@@ -32,7 +32,7 @@ void *clientThreadFunction(void *arg)
 {
 	char* ipAddress = (char *)arg;
 	char* sendBuffer;
-	int sendBufferLength;
+	size_t getlineLength;
 	struct sockaddr_in clientSocketAddress;
 	int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
 	if(clientSocket == -1)
@@ -44,13 +44,17 @@ void *clientThreadFunction(void *arg)
 	clientSocketAddress.sin_family = AF_INET;
 	clientSocketAddress.sin_port = htons(PORT_NUM);
 	inet_pton(AF_INET, ipAddress, &clientSocketAddress.sin_addr);
-	printf("Client Waiting For Connection...\n");
 	while(connect(clientSocket, (struct sockaddr *)&clientSocketAddress, sizeof(clientSocketAddress)) == -1);
 //sending
-	sendBuffer = "Im from Test2";
-	sendBufferLength = strlen(sendBuffer);
-	send(clientSocket, sendBuffer, BUFFER_SIZE, 0);
-	printf("Client Sent\n");
+	while(1)
+	{
+		sendBuffer = NULL;
+		getline(&sendBuffer, &getlineLength, stdin);
+		send(clientSocket, sendBuffer, BUFFER_SIZE, 0);
+		if(strcmp(sendBuffer, "exit\n") == 0)
+			break;
+		free(sendBuffer);
+	}
 //sending
 	close(clientSocket);
 	pthread_exit(NULL);
@@ -59,7 +63,6 @@ void *clientThreadFunction(void *arg)
 void *serverThreadFunction(void *arg)
 {
 	char receiveBuffer[BUFFER_SIZE];
-	int receiveBufferLength;
 	struct sockaddr_in serverSocketAddress;
 	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	int clientSocket;
@@ -92,8 +95,14 @@ void *serverThreadFunction(void *arg)
 		pthread_exit(NULL);
 	}
 //receive
-	recv(clientSocket, receiveBuffer, BUFFER_SIZE, 0);
-	printf("%s\n", receiveBuffer);
+	while(1)
+	{
+		recv(clientSocket, receiveBuffer, BUFFER_SIZE, 0);
+		printf("%s", receiveBuffer);
+		if(strcmp(receiveBuffer, "exit\n") == 0)
+			break;
+		memset(receiveBuffer, 0, sizeof(receiveBuffer));
+	}
 //receive
 	close(serverSocket);
 	pthread_exit(NULL);
