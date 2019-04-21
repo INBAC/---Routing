@@ -15,7 +15,7 @@ pthread_t tids[100];
 int thds;
 
 struct protocol{
-	char dest[15];
+	char dest[16];
 	char message[1024];
 };
 
@@ -89,7 +89,7 @@ static void * handle(void * arg)
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
 	struct protocol *pro;
-	//memset(&pro, 0, sizeof(pro));
+	memset(&pro, 0, sizeof(pro));
 
            
 	/* get peer addr */

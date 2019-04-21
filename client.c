@@ -11,7 +11,7 @@ char *buffer;
 char r_buffer[1024];
 
 struct protocol{
-	char dest[15];
+	char dest[16];
 	char message[1024];
 };
 
@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 	strcpy(pro.dest, "220.149.244.212");
 	strcpy(pro.message, "Hello world");
 
-	printf("%s, %s\n", pro.dest, pro.message);
+	printf("%s %s\n", pro.dest, pro.message);
 
 	// arg parsing
 	if (argc != 3) {
