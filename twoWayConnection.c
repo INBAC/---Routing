@@ -17,7 +17,7 @@
 
 #define NODE_NUMBER 5
 #define BUFFER_SIZE 1024
-#define PORT_NUM 3605
+#define PORT_NUMBER 3605
 
 typedef struct
 {
@@ -27,6 +27,24 @@ typedef struct
 	int nextPort;
 	int metric;
 }ROUTING_TABLE_ENTRY;
+
+char* getIpAddress()
+{
+    struct ifaddrs *ifap, *ifa;
+    struct sockaddr_in *sa;
+    char *addr;
+    getifaddrs (&ifap);
+    for(ifa = ifap; ifa; ifa = ifa->ifa_next)
+    {
+        if (ifa->ifa_addr->sa_family==AF_INET)
+        {
+            sa = (struct sockaddr_in *) ifa->ifa_addr;
+            addr = inet_ntoa(sa->sin_addr);
+        }
+    }
+    freeifaddrs(ifap);
+    return addr;
+}
 
 void *clientThreadFunction(void *arg)
 {
@@ -42,7 +60,7 @@ void *clientThreadFunction(void *arg)
 	}
 	memset(&clientSocketAddress, 0, sizeof(clientSocketAddress));
 	clientSocketAddress.sin_family = AF_INET;
-	clientSocketAddress.sin_port = htons(PORT_NUM);
+	clientSocketAddress.sin_port = htons(PORT_NUMBER);
 	inet_pton(AF_INET, ipAddress, &clientSocketAddress.sin_addr);
 	while(connect(clientSocket, (struct sockaddr *)&clientSocketAddress, sizeof(clientSocketAddress)) == -1);
 //sending
@@ -74,7 +92,7 @@ void *serverThreadFunction(void *arg)
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress));
 	serverSocketAddress.sin_family = AF_INET;
 	serverSocketAddress.sin_addr.s_addr = htons(INADDR_ANY);
-	serverSocketAddress.sin_port = htons(PORT_NUM);
+	serverSocketAddress.sin_port = htons(PORT_NUMBER);
 	if(bind(serverSocket, (struct sockaddr *)&serverSocketAddress, sizeof(serverSocketAddress)) == -1)
 	{
 		perror("Server Bind Failure");
