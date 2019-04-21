@@ -14,10 +14,12 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <netdb.h>
+#include <ifaddrs.h>
 
 #define NODE_NUMBER 5
 #define BUFFER_SIZE 1024
 #define PORT_NUMBER 3605
+#define IP_LENGTH 16
 
 typedef struct
 {
@@ -27,6 +29,12 @@ typedef struct
 	int nextPort;
 	int metric;
 }ROUTING_TABLE_ENTRY;
+
+typedef struct
+{
+	char destinationIp[IP_LENGTH];
+	char message[BUFFER_SIZE];
+}PACKET;
 
 char* getIpAddress()
 {
@@ -50,6 +58,7 @@ void *clientThreadFunction(void *arg)
 {
 	char* ipAddress = (char *)arg;
 	char* sendBuffer;
+	PACKET sendPacket;
 	size_t getlineLength;
 	struct sockaddr_in clientSocketAddress;
 	int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -66,12 +75,14 @@ void *clientThreadFunction(void *arg)
 //sending
 	while(1)
 	{
+		memset(&sendPacket, 0, sizeof(PACKET));
 		sendBuffer = NULL;
 		getline(&sendBuffer, &getlineLength, stdin);
-		send(clientSocket, sendBuffer, BUFFER_SIZE, 0);
+		strcpy(sendPacket.message, sendBuffer);
+		strcpy(sendPacket.destinationIp, ipAddress);
+		send(clientSocket, &sendPacket, sizeof(PACKET), 0);
 		if(strcmp(sendBuffer, "exit\n") == 0)
 			break;
-		free(sendBuffer);
 	}
 //sending
 	close(clientSocket);
@@ -80,7 +91,8 @@ void *clientThreadFunction(void *arg)
 
 void *serverThreadFunction(void *arg)
 {
-	char receiveBuffer[BUFFER_SIZE];
+	char* receiveBuffer = (char *)malloc(sizeof(PACKET));
+	PACKET *receivePacket;
 	struct sockaddr_in serverSocketAddress;
 	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	int clientSocket;
@@ -115,11 +127,12 @@ void *serverThreadFunction(void *arg)
 //receive
 	while(1)
 	{
-		recv(clientSocket, receiveBuffer, BUFFER_SIZE, 0);
-		printf("%s", receiveBuffer);
-		if(strcmp(receiveBuffer, "exit\n") == 0)
+		memset(receiveBuffer, 0, sizeof(PACKET));
+		recv(clientSocket, receiveBuffer, sizeof(PACKET), 0);
+		receivePacket = (PACKET*)receiveBuffer;
+		printf("%s", receivePacket->message);
+		if(strcmp(receivePacket->message, "exit\n") == 0)
 			break;
-		memset(receiveBuffer, 0, sizeof(receiveBuffer));
 	}
 //receive
 	close(serverSocket);
