@@ -3,7 +3,7 @@
 	Purpose: To simulate routing table protocol
 	useful functions (socket, pthread, sigaction, timer, open, close, client, recv, bind, accept, listen, connect, memset, htons/l, ntohs/l, memset, malloc/free)
 */
-#include <stdio.h>
+#include<stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -19,6 +19,7 @@
 #define NODE_NUMBER 5
 #define BUFFER_SIZE 1024
 #define PORT_NUMBER 3605
+#define IP_LENGTH 16
 
 typedef struct
 {
@@ -29,8 +30,11 @@ typedef struct
 	int metric;
 }ROUTING_TABLE_ENTRY;
 
-char receiveBuffer[BUFFER_SIZE];
-char* destinationIp;
+typedef struct
+{
+	char destinationIp[IP_LENGTH];
+	char message[BUFFER_SIZE];
+}PACKET;
 
 char* getIpAddress()
 {
@@ -52,8 +56,9 @@ char* getIpAddress()
 
 void *clientThreadFunction(void *arg)
 {
-	char* nextIpAddress = (char *)arg;
+	char* ipAddress = (char *)arg;
 	char* sendBuffer;
+	PACKET sendPacket;
 	size_t getlineLength;
 	struct sockaddr_in clientSocketAddress;
 	int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -65,38 +70,29 @@ void *clientThreadFunction(void *arg)
 	memset(&clientSocketAddress, 0, sizeof(clientSocketAddress));
 	clientSocketAddress.sin_family = AF_INET;
 	clientSocketAddress.sin_port = htons(PORT_NUMBER);
-	inet_pton(AF_INET, nextIpAddress, &clientSocketAddress.sin_addr);
+	inet_pton(AF_INET, ipAddress, &clientSocketAddress.sin_addr);
 	while(connect(clientSocket, (struct sockaddr *)&clientSocketAddress, sizeof(clientSocketAddress)) == -1);
-	if(destinationIp == NULL)
+//sending
+	while(1)
 	{
-		while(1)
-		{
-			while(strlen(receiveBuffer) == 0);
-			sendBuffer = NULL;
-			send(clientSocket, sendBuffer, BUFFER_SIZE, 0);
-			if(strcmp(sendBuffer, "exit\n") == 0)
-				break;
-			free(sendBuffer);
-		}
+		memset(&sendPacket, 0, sizeof(PACKET));
+		sendBuffer = NULL;
+		getline(&sendBuffer, &getlineLength, stdin);
+		strcpy(sendPacket.message, sendBuffer);
+		strcpy(sendPacket.destinationIp, ipAddress);
+		send(clientSocket, &sendPacket, sizeof(PACKET), 0);
+		if(strcmp(sendBuffer, "exit\n") == 0)
+			break;
 	}
-	else
-	{
-		while(1)
-		{
-			sendBuffer = NULL;
-			getline(&sendBuffer, &getlineLength, stdin);
-			send(clientSocket, sendBuffer, BUFFER_SIZE, 0);
-			if(strcmp(sendBuffer, "exit\n") == 0)
-				break;
-			free(sendBuffer);
-		}
-	}
+//sending
 	close(clientSocket);
 	pthread_exit(NULL);
 }
 
 void *serverThreadFunction(void *arg)
 {
+	char* receiveBuffer = (char *)malloc(sizeof(PACKET));
+	PACKET *receivePacket;
 	struct sockaddr_in serverSocketAddress;
 	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	int clientSocket;
@@ -128,69 +124,28 @@ void *serverThreadFunction(void *arg)
 		close(serverSocket);
 		pthread_exit(NULL);
 	}
-	if(destinationIp == NULL)
+//receive
+	while(1)
 	{
-		while(1)
-		{
-			recv(clientSocket, receiveBuffer, BUFFER_SIZE, 0);
-			printf("%s", receiveBuffer);
-			if(strcmp(receiveBuffer, "exit\n") == 0)
-				break;
-			memset(receiveBuffer, 0, sizeof(receiveBuffer));
-		}
+		memset(receiveBuffer, 0, sizeof(PACKET));
+		recv(clientSocket, receiveBuffer, sizeof(PACKET), 0);
+		receivePacket = (PACKET*)receiveBuffer;
+		printf("%s", receivePacket->message);
+		if(strcmp(receivePacket->message, "exit\n") == 0)
+			break;
 	}
-	else
-	{
-		while(1)
-		{
-			recv(clientSocket, receiveBuffer, BUFFER_SIZE, 0);
-			printf("%s", receiveBuffer);
-			if(strcmp(receiveBuffer, "exit\n") == 0)
-				break;
-			memset(receiveBuffer, 0, sizeof(receiveBuffer));
-		}
-	}
+//receive
 	close(serverSocket);
 	pthread_exit(NULL);
 }
 
 void main(int argc, char* args[])
 {
-	int i;
-	char* input = NULL;
-	destinationIp = NULL;
-	ssize_t inputSize;
-	pthread_t clientThread[NODE_NUMBER - 1];
-	pthread_t serverThread[NODE_NUMBER - 1];
-	printf("Please enter 'r' for router or destination IP address: ");
-	getline(&input, &inputSize, stdin);
-	if(strcmp(input, "r\n") == 0)
-	{
-		for(i = 0; i < argc - 1; i ++)
-		{
-			pthread_create(&clientThread[i], NULL, clientThreadFunction, args[i]);
-			pthread_create(&serverThread[i], NULL, serverThreadFunction, NULL);
-		}
-		for(i = 0; i < argc - 1; i ++)
-		{
-			pthread_join(clientThread[i], NULL);
-			pthread_join(serverThread[i], NULL);
-		}
-		return;
-	}
-	else
-	{
-		destinationIp = strtok(input, "\n");
-		for(i = 0; i < argc - 1; i ++)
-		{
-			pthread_create(&clientThread[i], NULL, clientThreadFunction, args[i]);
-			pthread_create(&serverThread[i], NULL, serverThreadFunction, NULL);
-		}
-		for(i = 0; i < argc - 1; i ++)
-		{
-			pthread_join(clientThread[i], NULL);
-			pthread_join(serverThread[i], NULL);
-		}
-		return;
-	}
+	pthread_t clientThread;
+	pthread_t serverThread;
+	pthread_create(&clientThread, NULL, clientThreadFunction, args[1]);
+	pthread_create(&serverThread, NULL, serverThreadFunction, NULL);
+	pthread_join(clientThread, NULL);
+	pthread_join(serverThread, NULL);
+	return;
 }
