@@ -32,6 +32,9 @@ typedef struct
 	char message[BUFFER_SIZE];
 }PACKET;
 
+PACKET *receivePacket;
+int receiveFlag = 0;
+
 char* getIpAddress()
 {
     struct ifaddrs *ifap, *ifa;
@@ -55,7 +58,7 @@ void *clientThreadFunction(void *arg)
 	int i;
 	char** neighborIpAddress = (char **)arg;
 	char* myIpAddress = getIpAddress();
-	char* messageBuffer;
+	char* buffer;
 	PACKET sendPacket;
 	size_t getlineLength;
 	int numberOfConnections;
@@ -79,29 +82,75 @@ void *clientThreadFunction(void *arg)
 	while(1)
 	{
 		memset(&sendPacket, 0, sizeof(PACKET));
-		messageBuffer = NULL;
-		getline(&messageBuffer, &getlineLength, stdin);
-		strcpy(sendPacket.message, messageBuffer);
+		buffer = NULL;
+		getline(&buffer, &getlineLength, stdin);
+		strcpy(sendPacket.destinationIp, strtok(buffer, "\n"));
+		buffer = NULL;
+		getline(&buffer, &getlineLength, stdin);
+		strcpy(sendPacket.message, buffer);
 		strcpy(sendPacket.sourceIp, myIpAddress);
 		for(i = 0; i < numberOfConnections; i++)
 		{
-			strcpy(sendPacket.destinationIp, neighborIpAddress[i]);
 			send(clientSocket[i], &sendPacket, sizeof(PACKET), 0);
 		}
+	}
+}
+
+void *routerThreadFunction(void *arg)
+{
+	int i;
+	char** neighborIpAddress = (char **)arg;
+	char* myIpAddress = getIpAddress();
+	PACKET sendPacket;
+	int numberOfConnections;
+	for(numberOfConnections = 0; neighborIpAddress[numberOfConnections] != NULL; numberOfConnections++);
+	struct sockaddr_in clientSocketAddress[numberOfConnections];
+	int clientSocket[numberOfConnections];
+	for(i = 0; i < numberOfConnections; i++)
+	{
+		clientSocket[i] = socket(AF_INET, SOCK_STREAM, 0);
+		if(clientSocket[i] == -1)
+		{
+			perror("Client Socket Creation Failure");
+			pthread_exit(NULL);
+		}
+		memset(&clientSocketAddress[i], 0, sizeof(clientSocketAddress[i]));
+		clientSocketAddress[i].sin_family = AF_INET;
+		clientSocketAddress[i].sin_port = htons(PORT_NUMBER);
+		inet_pton(AF_INET, neighborIpAddress[i], &clientSocketAddress[i].sin_addr);
+		while(connect(clientSocket[i], (struct sockaddr *)&clientSocketAddress[i], sizeof(clientSocketAddress[i])) == -1);
+	}
+	while(1)
+	{
+		memset(&sendPacket, 0, sizeof(PACKET));
+		while(receiveFlag != 1);
+		strcpy(sendPacket.message, receivePacket->message);
+		strcpy(sendPacket.sourceIp, receivePacket->sourceIp);
+		strcpy(sendPacket.destinationIp, receivePacket->destinationIp);
+		for(i = 0; i < numberOfConnections; i++)
+		{
+			if(strcmp(sendPacket.destinationIp, neighborIpAddress[i]) == 0)
+			{
+				printf("%s -> %s\n", sendPacket.sourceIp, sendPacket.destinationIp);
+				send(clientSocket[i], &sendPacket, sizeof(PACKET), 0);
+			}
+		}
+		receiveFlag = 0;
 	}
 }
 
 void *serverThreadFunction(void *arg)
 {
 	int clientSocket = *(int *)arg;
+	char* myIpAddress = getIpAddress();
 	char* receiveBuffer = (char *)malloc(sizeof(PACKET));
-	PACKET *receivePacket;
 	while(1)
 	{
-		memset(receiveBuffer, 0, sizeof(PACKET));
 		recv(clientSocket, receiveBuffer, sizeof(PACKET), 0);
 		receivePacket = (PACKET*)receiveBuffer;
-		printf("%s: %s",receivePacket->sourceIp, receivePacket->message);
+		if(strcmp(receivePacket->destinationIp, myIpAddress) == 0)
+			printf("%s: %s",receivePacket->sourceIp, receivePacket->message);
+		receiveFlag = 1;
 	}
 }
 
@@ -109,8 +158,10 @@ void main(int argc, char* args[])
 {
 	int threadNumber = 1;
 	pthread_t clientThread;
-	pthread_t serverThread[NODE_NUMBER];
+	pthread_t routerThread;
+	pthread_t serverThread[(NODE_NUMBER - 1) * 2];
 	pthread_create(&clientThread, NULL, clientThreadFunction, args + 1);
+	pthread_create(&routerThread, NULL, routerThreadFunction, args + 1);
 	struct sockaddr_in serverSocketAddress;
 	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	int clientSocket;
