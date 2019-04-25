@@ -57,10 +57,13 @@ char* getIpAddress()
     freeifaddrs(ifap);
     return addr;
 }
-const char address[NODE_NUMBER][16]={"220.149.244.211", "220.149.244.212", "220.149.244.213", "220.149.244.214", "220.149.244.215"};
-char nextHop[2][16] = {"220.149.244.214", "220.149.244.215"};
+const char address[NODE_NUMBER][IP_LENGTH]={"220.149.244.211", "220.149.244.212", "220.149.244.213", "220.149.244.214", "220.149.244.215"};
+char nextHopIp[NODE_NUMBER][IP_LENGTH];
+//char nextHop[2][16] = {"220.149.244.214", "220.149.244.215"};
 //const int port[5] = {3155, 3156, 3157, 3158, 3159};
+
 char* nextIp; 
+
 PACKET sendPacket;
 PACKET* receivePacket;
 int flag = 0;
@@ -86,7 +89,7 @@ void* routerThreadFunction(void* arg){
 		//strcpy(sendPacket.message, receivePacket->message);
 printf("test : %s, %s\n", receivePacket->destinationIp, receivePacket->message);
 		for(int i = 0; i < NODE_NUMBER; i++){
-			if(strcmp(address[i], receivePacket->destinationIp) == 0){
+			if(strcmp(nextHopIp[i], receivePacket->destinationIp) == 0){
 				//strcpy(sendPacket.destinationIp, destinationIp);
 				serverNumber = i;
 				break;
@@ -140,7 +143,7 @@ void *clientThreadFunction(void *arg)
 		//}
 
 		for(int i = 0; i < NODE_NUMBER; i++){
-			if(strcmp(address[i], destinationIp) == 0){
+			if(strcmp(nextHopIp[i], destinationIp) == 0){
 				strcpy(sendPacket.destinationIp, destinationIp);
 				serverNumber = i;
 				break;
@@ -211,7 +214,9 @@ void *serverThreadFunction(void *arg)
 
 void main(int argc, char* args[])
 {
-	int threadNumber = 1;
+	char* line = NULL;
+	FILE* fp = fopen("FIB.txt", "r");
+	int threadNumber = 1;	
 	pthread_t clientThread;
 	pthread_t serverThread[NODE_NUMBER];
 	pthread_t routerThread;
@@ -219,6 +224,15 @@ void main(int argc, char* args[])
 	struct sockaddr_in serverSocketAddress;
 	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	int clientSocket;
+	size_t len = 0;
+
+	for(int i = 0; i < NODE_NUMBER; i++){
+		getline(&line, &len, fp);
+		strtok(line, " ");
+		strcpy(nextHopIp[i], strtok(line, " "));
+		//printf("strtok test : %s\n", nextHopIp[i]);		
+	}
+
 	if(serverSocket == -1)
 	{
 		perror("Server Socket Creation Failure");
@@ -251,7 +265,7 @@ void main(int argc, char* args[])
 			close(serverSocket);
 			pthread_exit(NULL);
 		}
-		printf("thread %d create\n");
+		printf("thread %d create\n", threadNumber);
 		pthread_create(&serverThread[threadNumber++], NULL, serverThreadFunction, &clientSocket);
 	
 	}
