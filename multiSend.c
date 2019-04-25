@@ -60,7 +60,7 @@ const char address[NODE_NUMBER][16]={"220.149.244.211", "220.149.244.212", "220.
 //const int port[5] = {3155, 3156, 3157, 3158, 3159};
 char* nextIp; 
 PACKET sendPacket;
-//int flag = 0;
+int flag = 0;
 
 
 void *clientThreadFunction(void *arg)
