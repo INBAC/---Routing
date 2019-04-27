@@ -11,29 +11,34 @@
 #include <netdb.h>
 #include <ifaddrs.h>
 
-#define NODE_NUMBER 5
+#define MAX_NODE_NUMBER 10
 #define BUFFER_SIZE 1024
 #define PORT_NUMBER 3605
 #define IP_LENGTH 16
 
 typedef struct
 {
-	char* destinationIp;
-	int destinationPort;
-	char* nextIp;
-	int nextPort;
-	int metric;
-}ROUTING_TABLE_ENTRY;
+	char sourceIp[IP_LENGTH];
+	char neighborIp[MAX_NODE_NUMBER][IP_LENGTH];
+	int cost[MAX_NODE_NUMBER];
+	char mark;
+}LSA;
 
 typedef struct
 {
-	char destinationIp[IP_LENGTH];
 	char sourceIp[IP_LENGTH];
-	char message[BUFFER_SIZE];
-}PACKET;
+	char neighborIp[IP_LENGTH];
+	int cost;
+	char mark;
+}LSDB_ENTRY;
 
-PACKET *receivePacket;
+int neighborNodeNumber;
+int lsdbEntryNumber = 0;
 int receiveFlag = 0;
+LSA myInfoPacket;
+LSA neighborInfoPacket;
+LSA* receivePacket;
+LSDB_ENTRY* LSDB;
 
 char* getIpAddress()
 {
@@ -53,19 +58,80 @@ char* getIpAddress()
     return addr;
 }
 
+void initialize(char* fileName)
+{
+	int i = 0;
+	FILE* fileptr = fopen(fileName, "r");
+	char* buffer = NULL;
+	size_t bufferSize;
+	memset(&myInfoPacket, 0, sizeof(LSA));
+	strcpy(myInfoPacket.sourceIp, getIpAddress());
+	while(getline(&buffer, &bufferSize, fileptr) != -1)
+	{
+		strcpy(myInfoPacket.neighborIp[i], strtok(buffer, " "));
+		myInfoPacket.cost[i++] = atoi(strtok(NULL, "\n"));
+	}
+	neighborNodeNumber = i;
+	myInfoPacket.mark = 's';
+	LSDB = (LSDB_ENTRY *)malloc(sizeof(LSDB_ENTRY) * ((MAX_NODE_NUMBER * (MAX_NODE_NUMBER - 1))));
+	for(i = 0; i < neighborNodeNumber; i++)
+	{
+		strcpy(LSDB[i].sourceIp, myInfoPacket.sourceIp);
+		strcpy(LSDB[i].neighborIp, myInfoPacket.neighborIp[i]);
+		LSDB[i].cost = myInfoPacket.cost[i];
+		LSDB[i].mark = 's';
+		lsdbEntryNumber++;
+	}
+	fclose(fileptr);
+	return;
+}
+
+void *serverThreadFunction(void *arg)
+{
+	int i;
+	int duplicateIpCheck;
+	int clientSocket = *(int *)arg;
+	char* receiveBuffer = (char *)malloc(sizeof(LSA));
+	while(1)
+	{
+		recv(clientSocket, receiveBuffer, sizeof(LSA), 0);
+		while(receiveFlag == 1);
+		receivePacket = (LSA*)receiveBuffer;
+		receiveFlag = 1;
+		duplicateIpCheck = 1;
+		for(i = 0; i < lsdbEntryNumber; i++)
+		{
+			if(strcmp(receivePacket->sourceIp, LSDB[i].sourceIp) == 0)
+			{
+				duplicateIpCheck = 0;
+				break;
+			}
+		}
+		if(duplicateIpCheck == 1)
+		{
+			for(i = 0; strlen(receivePacket->neighborIp[i]) > 0; i++)
+			{
+				strcpy(LSDB[lsdbEntryNumber + i].sourceIp, receivePacket->sourceIp);
+				strcpy(LSDB[lsdbEntryNumber + i].neighborIp, receivePacket->neighborIp[i]);
+				LSDB[lsdbEntryNumber + i].cost = receivePacket->cost[i];
+				LSDB[lsdbEntryNumber + i].mark = receivePacket->mark;
+			}
+			lsdbEntryNumber = lsdbEntryNumber + i;
+		}
+		for(i = 0; i < lsdbEntryNumber; i++)
+		{
+			printf("%c %s -> %s :::: %d\n", LSDB[i].mark, LSDB[i].sourceIp, LSDB[i].neighborIp, LSDB[i].cost);
+		}
+		printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+	}
+}
+
 void *clientThreadFunction(void *arg)
 {
 	int i;
-	char** neighborIpAddress = (char **)arg;
-	char* myIpAddress = getIpAddress();
-	char* buffer;
-	PACKET sendPacket;
-	size_t getlineLength;
-	int numberOfConnections;
-	for(numberOfConnections = 0; neighborIpAddress[numberOfConnections] != NULL; numberOfConnections++);
-	struct sockaddr_in clientSocketAddress[numberOfConnections];
-	int clientSocket[numberOfConnections];
-	for(i = 0; i < numberOfConnections; i++)
+	struct sockaddr_in clientSocketAddress[neighborNodeNumber];
+	int clientSocket[neighborNodeNumber];
+	for(i = 0; i < neighborNodeNumber; i++)
 	{
 		clientSocket[i] = socket(AF_INET, SOCK_STREAM, 0);
 		if(clientSocket[i] == -1)
@@ -76,22 +142,15 @@ void *clientThreadFunction(void *arg)
 		memset(&clientSocketAddress[i], 0, sizeof(clientSocketAddress[i]));
 		clientSocketAddress[i].sin_family = AF_INET;
 		clientSocketAddress[i].sin_port = htons(PORT_NUMBER);
-		inet_pton(AF_INET, neighborIpAddress[i], &clientSocketAddress[i].sin_addr);
+		inet_pton(AF_INET, myInfoPacket.neighborIp[i], &clientSocketAddress[i].sin_addr);
 		while(connect(clientSocket[i], (struct sockaddr *)&clientSocketAddress[i], sizeof(clientSocketAddress[i])) == -1);
 	}
 	while(1)
 	{
-		memset(&sendPacket, 0, sizeof(PACKET));
-		buffer = NULL;
-		getline(&buffer, &getlineLength, stdin);
-		strcpy(sendPacket.destinationIp, strtok(buffer, "\n"));
-		buffer = NULL;
-		getline(&buffer, &getlineLength, stdin);
-		strcpy(sendPacket.message, buffer);
-		strcpy(sendPacket.sourceIp, myIpAddress);
-		for(i = 0; i < numberOfConnections; i++)
+		for(i = 0; i < neighborNodeNumber; i++)
 		{
-			send(clientSocket[i], &sendPacket, sizeof(PACKET), 0);
+			myInfoPacket.mark = 'd';
+			send(clientSocket[i], &myInfoPacket, sizeof(LSA), 0);
 		}
 	}
 }
@@ -99,14 +158,9 @@ void *clientThreadFunction(void *arg)
 void *routerThreadFunction(void *arg)
 {
 	int i;
-	char** neighborIpAddress = (char **)arg;
-	char* myIpAddress = getIpAddress();
-	PACKET sendPacket;
-	int numberOfConnections;
-	for(numberOfConnections = 0; neighborIpAddress[numberOfConnections] != NULL; numberOfConnections++);
-	struct sockaddr_in clientSocketAddress[numberOfConnections];
-	int clientSocket[numberOfConnections];
-	for(i = 0; i < numberOfConnections; i++)
+	struct sockaddr_in clientSocketAddress[neighborNodeNumber];
+	int clientSocket[neighborNodeNumber];
+	for(i = 0; i < neighborNodeNumber; i++)
 	{
 		clientSocket[i] = socket(AF_INET, SOCK_STREAM, 0);
 		if(clientSocket[i] == -1)
@@ -117,51 +171,35 @@ void *routerThreadFunction(void *arg)
 		memset(&clientSocketAddress[i], 0, sizeof(clientSocketAddress[i]));
 		clientSocketAddress[i].sin_family = AF_INET;
 		clientSocketAddress[i].sin_port = htons(PORT_NUMBER);
-		inet_pton(AF_INET, neighborIpAddress[i], &clientSocketAddress[i].sin_addr);
+		inet_pton(AF_INET, myInfoPacket.neighborIp[i], &clientSocketAddress[i].sin_addr);
 		while(connect(clientSocket[i], (struct sockaddr *)&clientSocketAddress[i], sizeof(clientSocketAddress[i])) == -1);
 	}
 	while(1)
 	{
-		memset(&sendPacket, 0, sizeof(PACKET));
-		while(receiveFlag != 1);
-		strcpy(sendPacket.message, receivePacket->message);
-		strcpy(sendPacket.sourceIp, receivePacket->sourceIp);
-		strcpy(sendPacket.destinationIp, receivePacket->destinationIp);
-		for(i = 0; i < numberOfConnections; i++)
+		while(receiveFlag == 0);
+		strcpy(neighborInfoPacket.sourceIp, receivePacket->sourceIp);
+		for(i = 0; strlen(receivePacket->neighborIp[i]) > 0; i++)
 		{
-			if(strcmp(sendPacket.destinationIp, neighborIpAddress[i]) == 0)
-			{
-				printf("%s -> %s\n", sendPacket.sourceIp, sendPacket.destinationIp);
-				send(clientSocket[i], &sendPacket, sizeof(PACKET), 0);
-			}
+			strcpy(neighborInfoPacket.neighborIp[i], receivePacket->neighborIp[i]);
+			neighborInfoPacket.cost[i] = receivePacket->cost[i];
+			neighborInfoPacket.mark = 'i';
+		}
+		for(i = 0; i < neighborNodeNumber; i++)
+		{
+			send(clientSocket[i], &neighborInfoPacket, sizeof(LSA), 0);
 		}
 		receiveFlag = 0;
 	}
 }
 
-void *serverThreadFunction(void *arg)
+void startThreads()
 {
-	int clientSocket = *(int *)arg;
-	char* myIpAddress = getIpAddress();
-	char* receiveBuffer = (char *)malloc(sizeof(PACKET));
-	while(1)
-	{
-		recv(clientSocket, receiveBuffer, sizeof(PACKET), 0);
-		receivePacket = (PACKET*)receiveBuffer;
-		if(strcmp(receivePacket->destinationIp, myIpAddress) == 0)
-			printf("%s: %s",receivePacket->sourceIp, receivePacket->message);
-		receiveFlag = 1;
-	}
-}
-
-void main(int argc, char* args[])
-{
-	int threadNumber = 1;
+	int threadNumber = 0;
 	pthread_t clientThread;
 	pthread_t routerThread;
-	pthread_t serverThread[(NODE_NUMBER - 1) * 2];
-	pthread_create(&clientThread, NULL, clientThreadFunction, args + 1);
-	pthread_create(&routerThread, NULL, routerThreadFunction, args + 1);
+	pthread_t serverThread[MAX_NODE_NUMBER * 2];
+	pthread_create(&clientThread, NULL, clientThreadFunction, NULL);
+	pthread_create(&routerThread, NULL, routerThreadFunction, NULL);
 	struct sockaddr_in serverSocketAddress;
 	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	int clientSocket;
@@ -197,4 +235,15 @@ void main(int argc, char* args[])
 		}
 		pthread_create(&serverThread[threadNumber++], NULL, serverThreadFunction, &clientSocket);
 	}
+}
+
+void main(int argc, char* args[])
+{
+	if(argc < 2)
+	{
+		printf("Please Enter The File\n");
+		exit(0);
+	}
+	initialize(args[1]);
+	startThreads();
 }
