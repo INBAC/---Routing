@@ -226,6 +226,6 @@ public class dijkstra
 		String ip = getIpAddress();
 		int sourceVertex = Integer.parseInt(ip.substring(14));
 		new dijkstra(args[0], args[1]);
-		dijkstra(graph, sourceVertex); 
+		dijkstra(graph, sourceVertex - 1); 
 	}
 }
