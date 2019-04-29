@@ -35,7 +35,8 @@ typedef struct
 }ROUTING_TABLE_ENTRY;
 
 typedef struct
-{	//char sourceIp[IP_LENGTH];
+{	
+	char sourceIp[IP_LENGTH];
 	char destinationIp[IP_LENGTH];
 	char message[BUFFER_SIZE];
 }PACKET;
@@ -57,56 +58,39 @@ char* getIpAddress()
     freeifaddrs(ifap);
     return addr;
 }
-//const char address[NODE_NUMBER][IP_LENGTH]={"220.149.244.211", "220.149.244.212", "220.149.244.213", "220.149.244.214", "220.149.244.215"};
 char nextHopIp[NODE_NUMBER][IP_LENGTH];
 char destinationIp[NODE_NUMBER][IP_LENGTH];
-//char nextHop[2][16] = {"220.149.244.214", "220.149.244.215"};
-//const int port[5] = {3155, 3156, 3157, 3158, 3159};
-
-//char* nextIp; 
 
 PACKET sendPacket;
 PACKET* receivePacket;
 int flag = 0;
 char* sendBuffer;
 char* receiveBuffer;
-	size_t ipLength = IP_LENGTH;
-	size_t getlineLength;
-	struct sockaddr_in clientSocketAddress[NODE_NUMBER];
-	//int serverNumber = 0;
-	int clientSocket[NODE_NUMBER];
-	int connectionCheck[NODE_NUMBER] = {0};
-	char destination[16];
-
-
+size_t ipLength = IP_LENGTH;
+size_t getlineLength;
+struct sockaddr_in clientSocketAddress[NODE_NUMBER];
+int clientSocket[NODE_NUMBER];
+int connectionCheck[NODE_NUMBER] = {0};
+char destination[16];
 
 void* routerThreadFunction(void* arg){
 	int serverNumber = 0;
 	while(1){
 		while(flag != ROUTER);
-		printf("\nI'm router\n");
-
-		//receivePacket = (PACKET*)receiveBuffer;
-
-		//strcpy(sendPacket.destinationIp, receivePacket->destinationIp);
-		//strcpy(sendPacket.message, receivePacket->message);
-printf("test : %s, %s\n", receivePacket->destinationIp, receivePacket->message);
 		for(int i = 0; i < NODE_NUMBER - 1; i++){
 			if(strcmp(destinationIp[i], receivePacket->destinationIp) == 0){
-				//strcpy(sendPacket.destinationIp, destinationIp);
 				serverNumber = i;
 				break;
 			}
 		}
-if(connectionCheck[serverNumber] == 0){
+		if(connectionCheck[serverNumber] == 0){
 			while(connect(clientSocket[serverNumber], (struct sockaddr *)&clientSocketAddress[serverNumber], sizeof(clientSocketAddress[serverNumber])) == -1);
 		}
 
 		if(connectionCheck[serverNumber] == 0) connectionCheck[serverNumber] = 1;
 
-
 		send(clientSocket[serverNumber], receivePacket, sizeof(PACKET), 0);
-		printf("send : %s\n", receivePacket->message);
+		printf("ROUTING packet from %s :: %s -> %s\n", receivePacket->sourceIp, getIpAddress(), nextHopIp[serverNumber]);
 		flag = SERVER;
 	}
 
@@ -114,7 +98,6 @@ if(connectionCheck[serverNumber] == 0){
 
 void *clientThreadFunction(void *arg)
 {
-	//char* ipAddress = nextIp;//(char *)arg;
 	int serverNumber;	
 	for(int i = 0; i < NODE_NUMBER - 1; i++){ 
 
@@ -136,50 +119,29 @@ void *clientThreadFunction(void *arg)
 	//sending
 	while(1)
 	{	
-		//while(flag != CLIENT);
-
-		//if(flag == CLIENT){
-			printf("input destination ip : ");
-			gets(destination);
-
-		//}else if(flag == ROUTER){
-		//	strcpy(destinationIp, receivePacket->destinationIp);
-		//}
+		gets(destination);
 
 		for(int i = 0; i < NODE_NUMBER - 1; i++){
 			if(strcmp(destinationIp[i], destination) == 0){
 				strcpy(sendPacket.destinationIp, destination);
+				strcpy(sendPacket.sourceIp, getIpAddress());
 				serverNumber = i;
 				break;
 			}
 		}
 
-printf("waiting connection\n");
 		if(connectionCheck[serverNumber] == 0){
 			while(connect(clientSocket[serverNumber], (struct sockaddr *)&clientSocketAddress[serverNumber], sizeof(clientSocketAddress[serverNumber])) == -1);
 		}
 
 		if(connectionCheck[serverNumber] == 0) connectionCheck[serverNumber] = 1;
-
-		//sendBuffer = NULL;
-	
-		//if(flag == CLIENT){
-			printf("message : ");
-			gets(sendPacket.message);
-			//getline(&sendBuffer, &getlineLength, stdin);
-		//}else if(flag == ROUTER){
-		//	strcpy(sendPacket->message, receivePacket->message);	
-		//}
+		gets(sendPacket.message);
 
 		send(clientSocket[serverNumber], &sendPacket, sizeof(PACKET), 0);
-		printf("send : %s to %s\n", sendPacket.message, sendPacket.destinationIp);
-		
-		//if(strcmp(sendBuffer, "exit\n") == 0)
-		//	break;
-	
-		//if(flag != ROUTER) flag = CLIENT;
+		printf("CLIENT packet sent to %s :: %s\n", sendPacket.destinationIp, sendPacket.message);
 	}
-//sending
+	//sending
+
 	for(int i = 0; i < NODE_NUMBER; i++)close(clientSocket[i]);
 	pthread_exit(NULL);
 }
@@ -198,22 +160,12 @@ void *serverThreadFunction(void *arg)
 		receivePacket = (PACKET*)receiveBuffer;
 
 		if(strcmp(receivePacket->destinationIp, getIpAddress()) != 0){
-			//printf("to router : %s\n", receivePacket->message);
-			//strcpy(sendPacket.destinationIp, receivePacket->destinationIp);
-			//strcpy(sendPacket.message, receivePacket->message);
 			flag = ROUTER;
 		}
-		//while(flag == ROUTER);
-		printf("test\n");
 		if(flag == SERVER){
-			printf("receive : %s\n", receivePacket->message);
-			//if(strcmp(receiveBuffer, "exit\n") == 0)
-			//	break;
+			printf("SERVER received packet from %s :: %s\n", receivePacket->sourceIp, receivePacket->message);
 		}
-;
 	}
-//receive
-	//close(serverSocket);
 	pthread_exit(NULL);
 }
 
@@ -230,14 +182,12 @@ void main(int argc, char* args[])
 	int clientSocket;
 	size_t len = 0;
 	int i = 0;
-char* temp;
+	char* temp;
 
 	while(getline(&line, &len, fp) != -1){
 		temp = strtok(line, " ");
 		strcpy(destinationIp[i], temp);
 		strcpy(nextHopIp[i], strtok(NULL, "\n"));
-		//rintf("%s\n", destinationIp[i]);
-		printf("send to %s, hope to %s\n ", destinationIp[i], nextHopIp[i]);
 		i++;		
 	}
 
@@ -257,7 +207,6 @@ char* temp;
 		pthread_exit(NULL);
 	}
 	pthread_create(&clientThread, NULL, clientThreadFunction, args[1]);
-//	pthread_create(&serverThread, NULL, serverThreadFunction, NULL);
 	pthread_create(&routerThread, NULL, routerThreadFunction, NULL);
 	while(1){
 	
@@ -273,11 +222,8 @@ char* temp;
 			close(serverSocket);
 			pthread_exit(NULL);
 		}
-		printf("thread %d create\n", threadNumber);
 		pthread_create(&serverThread[threadNumber++], NULL, serverThreadFunction, &clientSocket);
 	
 	}
-	//pthread_join(clientThread, NULL);
-	//pthread_join(serverThread, NULL);
 	return;
 }
